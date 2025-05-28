@@ -30,3 +30,8 @@ star_for_starfusion/
 starfusion/
 stringtie/
 vcf/
+assets/
+bin/
+conf/
+docs/
+lib/
