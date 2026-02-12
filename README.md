@@ -1,4 +1,4 @@
-# This nf-core/rnafusion pipeline (v-3.0.1) is used when the older version [patkarlab/rnafusion](https://github.com/patkarlab/rnafusion) (v-2.3) does not produce any output
+# This nf-core/rnafusion pipeline (v-3.0.1) is used in cases where the older version [patkarlab/rnafusion](https://github.com/patkarlab/rnafusion) (v-2.3) does not produce any output
 
 # ![nf-core/rnafusion](docs/images/nf-core-rnafusion_logo_light.png#gh-light-mode-only) ![nf-core/rnafusion](docs/images/nf-core-rnafusion_logo_dark.png#gh-dark-mode-only)
 
@@ -61,42 +61,41 @@ In rnafusion the full-sized test includes reference building and fusion detectio
 11. Present QC for raw reads ([`MultiQC`](http://multiqc.info/))
 12. Compress bam files to cram with [samtools view](http://www.htslib.org/)
 
+
+#### Secondary Workflow
+
+1. Calculating coverage.
+2. Sorting and indexing the bam file and saving it to the Output directory.
+3. Copying all the output files from their respective folders to the Output directory.
+4. Generating an input file (tsv) for FusViz.
+5. Running metafusion.
+1. Dashboard creation
+
+For this workflow, following programs need to be installed and their complete paths need to be added in the params section of the `$PWD/scripts/custom.config`  
+
+- SV_standard perl script from https://github.com/senzhaocode/SV_standard
+- MetaFusion = Pull the docker container from https://github.com/ccmbioinfo/MetaFusion/wiki/metafusion_sop
+- bedtools = bedtools executable path
+- samtools = samtools executable path
+
 ## Usage
 
-:::note
-If you are new to Nextflow and nf-core, please refer to [this page](https://nf-co.re/docs/usage/installation) on how
-to set-up Nextflow. Make sure to [test your setup](https://nf-co.re/docs/usage/introduction#how-to-run-a-pipeline)
-with `-profile test` before running the workflow on actual data.
-:::
+#### For running both the workflows, run the script `run_nextflow.sh` as follows:
+```
+./run_nextflow.sh samp.dat script.log
 
-As the reference building is computationally heavy (> 24h on HPC), it is recommended to test the pipeline with the `-stub` parameter (creation of empty files):
-
-First, build the references:
-
-```bash
-nextflow run nf-core/rnafusion \
-   -profile <docker/singularity/.../institute> \
-   -profile test \
-   --outdir <OUTDIR>\
-   --build_references \
-   -stub
+   - samp.dat = List of samples
+   - script.log = log file
+```
+This script contains nextflow commands for running both the workflows. 
+The correct bedfile will be used based on the panel name present in the sample id.
+```console
+nextflow run nf-core/rnafusion --input samplesheet.csv --outdir <OUTDIR> --genome GRCh38 --all -profile docker
 ```
 
-Then perform the analysis:
-
-```bash
-nextflow run nf-core/rnafusion \
-   -profile <docker/singularity/.../institute> \
-   -profile test \
-   --outdir <OUTDIR>\
-   -stub
+```console
+nextflow -C $PWD/scripts/custom.config run $PWD$/scripts/custom_v2.nf -entry COVERAGE --input <samplesheet_bedmap>
 ```
-
-:::warning
-Please provide pipeline parameters via the CLI or Nextflow `-params-file` option. Custom config files including those
-provided by the `-c` Nextflow option can be used to provide any configuration _**except for parameters**_;
-see [docs](https://nf-co.re/usage/configuration#custom-configuration-files).
-:::
 
 > **Notes:**
 >
