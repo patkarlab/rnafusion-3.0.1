@@ -13,15 +13,20 @@ fusioncatcher_fusion_genes = args[5]
 fusioncatcher_summary = args[6]
 starfusion = args[7]
 #stringtie = args[8]
+vardict = args[8]
+haplotypecaller = args[9]
 
-csvfilenames=[ coverage, arriba, fusioncatcher_fusion_genes, fusioncatcher_summary, starfusion]
+csvfilenames=[ coverage, arriba, fusioncatcher_fusion_genes, fusioncatcher_summary, starfusion, vardict, haplotypecaller]
 writer = pd.ExcelWriter(outfile)
 for csvfilename in csvfilenames:
 	if (os.path.exists(csvfilename)) and (os.path.getsize(csvfilename) != 0):
 		sheetname=os.path.split(csvfilename)[1]
-		df = pd.read_csv(csvfilename, sep = '\t')
+		if csvfilename.endswith(".csv"):
+			df = pd.read_csv(csvfilename, sep=",")
+		else:
+			df = pd.read_csv(csvfilename, sep="\t")
 		print('process file:', csvfilename, 'shape:', df.shape)
 		new_sheet_name = os.path.splitext(sheetname)[0]
-		new_sheet_name = re.sub (sample,"", new_sheet_name, flags = re.IGNORECASE)
+		new_sheet_name = re.sub (sample,"", new_sheet_name, flags = re.IGNORECASE).strip("._")
 		df.to_excel(writer,sheet_name=new_sheet_name, index=False)
 writer.close()

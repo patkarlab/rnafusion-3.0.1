@@ -7,42 +7,46 @@ STARTING PIPELINE
 
 Sample list: ${params.input}
 """
-process coverage {
-	publishDir "$PWD/Final_Output/${sampleId}/", mode: 'copy', pattern: '*.counts.bed'
+
+vardict = params.vardict
+
+include { VAR_RNA } from '../workflows/var_rna.nf'
+include { ANNOVAR as ANNOVAR_VARDICT } from '../modules/local/annovar/annotate/main'
+include { FORMAT_VARDICT } from '../modules/local/python/format_vardict/main'
+
+process COUNTS {
+	tag "${sampleId}"
+	publishDir "${PWD}/Final_Output/${sampleId}/", mode: 'copy'
 	input:
-		tuple val(sampleId), path(read1)
+		tuple val(sampleId), path(bedfile), path(arriba_bam)
 	output:
-		tuple val (sampleId), file ("*.counts.bed")
+		tuple val (sampleId), file("${sampleId}.counts.bed")
 	script:
 	"""
-	#${params.bedtools} bamtobed -i $PWD/fusioninspector/${sampleId}.consolidated.bam > ${sampleId}.bed
-	${params.bedtools} bamtobed -i $PWD/star_for_arriba/${sampleId}.Aligned.out.bam | awk 'BEGIN{OFS="\t"}{ \$1="chr"\$1; print }' > ${sampleId}.bed
-	#${params.bedtools} bamtobed -i $PWD/picard/${sampleId}.bam | awk 'BEGIN{OFS="\t"}{ \$1="chr"\$1; print }' > ${sampleId}.bed
-	#${params.bedtools} bamtobed -i $PWD/star_for_squid/${sampleId}.Aligned.sortedByCoord.out.bam | awk 'BEGIN{OFS="\t"}{ \$1="chr"\$1; print }' > ${sampleId}.bed
-	#${params.bedtools} bamtobed -i $PWD/star_for_starfusion/${sampleId}.Aligned.sortedByCoord.out.bam | awk 'BEGIN{OFS="\t"}{ \$1="chr"\$1; print }' > ${sampleId}.bed
-	#${params.bedtools} bamtobed -i $PWD/samtools/${sampleId}_chimeric.bam | awk 'BEGIN{OFS="\t"}{ \$1="chr"\$1; print }' > ${sampleId}.bed
-	${params.bedtools} coverage -counts -a ${read1} -b ${sampleId}.bed > ${sampleId}.counts.bed
-
+	${params.bedtools} coverage -counts -a ${bedfile} -b ${arriba_bam} > ${sampleId}.counts.bed
 	"""
 }
 
-process bam {
+process BAM {
+	tag "${sampleId}"
+	label 'process_inter'
+	publishDir "${PWD}/Final_Output/${sampleId}/", mode: 'copy'
 	input:
-		tuple val(sampleId), path(read1)
+		tuple val(sampleId), path(bedfile), path(arriba_bam)
 	output:
-		tuple val (sampleId), file ("*.sorted.bam"), file ("*.sorted.bam.bai")
+		tuple val (sampleId), file ("${sampleId}.sorted.bam"), file ("${sampleId}.sorted.bam.bai")
 	script:
 	"""
-	${params.samtools} sort $PWD/star_for_arriba/${sampleId}.Aligned.out.bam -o ${sampleId}.sorted.bam
-	${params.samtools} index ${sampleId}.sorted.bam
-	cp ${sampleId}.sorted.bam* $PWD/Final_Output/${sampleId}/
-
+	${params.samtools} sort -@ ${task.cpus} ${arriba_bam} -o ${sampleId}.sorted.bam
+	${params.samtools} index -@ ${task.cpus} ${sampleId}.sorted.bam
 	"""
 }
 
-process file_copy {
+process FILE_COPY {
 	input:
-		tuple val(sampleId), file (coverage_bed), file (bamFile), file(bamBai)
+		tuple val(sampleId), file (coverage_bed), file(vardict_csv), file(haplotypecaller_csv)
+	output:
+		val (sampleId)
 	script:
 	"""
 	#if [ -f ${PWD}/arriba/${sampleId}.arriba.fusions.tsv ]; then
@@ -79,7 +83,22 @@ process file_copy {
 		grep -v '^#' ${PWD}/stringtie/${sampleId}.transcripts.gtf >> ${sampleId}_stringtie.tsv		
 	fi
 
-	python3 ${params.merge_csvs_script} ${sampleId} ${PWD}/Final_Output/${sampleId}/${sampleId}.xlsx ${coverage_bed} ${PWD}/arriba/${sampleId}.arriba.fusions.tsv ${PWD}/fusioncatcher/${sampleId}.fusioncatcher.fusion-genes.txt ${PWD}/fusioncatcher/${sampleId}.fusioncatcher.summary.txt ${PWD}/starfusion/${sampleId}.starfusion.fusion_predictions.tsv ${sampleId}_stringtie.tsv
+	python3 ${params.merge_csvs_script} ${sampleId} ${PWD}/Final_Output/${sampleId}/${sampleId}.xlsx ${coverage_bed} ${PWD}/arriba/${sampleId}.arriba.fusions.tsv ${PWD}/fusioncatcher/${sampleId}.fusioncatcher.fusion-genes.txt ${PWD}/fusioncatcher/${sampleId}.fusioncatcher.summary.txt ${PWD}/starfusion/${sampleId}.starfusion.fusion_predictions.tsv ${vardict_csv} ${haplotypecaller_csv}
+
+	"""
+}
+
+process VARDICT {
+	tag "${sampleId}"
+	label 'process_inter'
+	input:
+		tuple val (sampleId), file (sorted_bam), file (sorted_bam_bai), path(bedfile), path(squid_bam)
+	output:
+		tuple val(sampleId), file ("${sampleId}.vardict.vcf.gz"), file("${sampleId}.vardict.vcf.gz.tbi")
+	script:
+	"""
+	VarDict -G ${params.genome} -f 0.05 -N ${sampleId} -b ${sorted_bam} -c 1 -S 2 -E 3 -g 4 -th ${task.cpus} -L 10000000 --verbose ${bedfile} | teststrandbias.R | var2vcf_valid.pl | gzip > ${sampleId}.vardict.vcf.gz
+	touch ${sampleId}.vardict.vcf.gz.tbi
 	"""
 }
 
@@ -91,7 +110,11 @@ workflow COVERAGE {
 		.set { samples_ch }
 
 	main:
-	coverage(samples_ch)
-	bam(samples_ch)
-	file_copy(coverage.out.join(bam.out))
+	COUNTS(samples_ch)
+	BAM(samples_ch)
+	haplotypecaller_csv = VAR_RNA(samples_ch)
+	VARDICT(BAM.out.join(samples_ch))
+	ANNOVAR_VARDICT(VARDICT.out, vardict)
+	FORMAT_VARDICT(ANNOVAR_VARDICT.out)
+	FILE_COPY(COUNTS.out.join(FORMAT_VARDICT.out.join(haplotypecaller_csv)))
 }

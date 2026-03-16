@@ -17,7 +17,7 @@ done
 export JAVA_HOME=/home/programs/nextflow/jdk-17.0.9
 export PATH="$JAVA_HOME/bin:$PATH"
 export NXF_VER=23.10.1
-/home/programs/nextflow/nextflow run ./ --all --input samplesheet.csv --outdir /home/diagnostics/pipelines/nf-core/rnafusion-3.0.1 --genome GRCh38 -profile docker -resume > ${log_file}
+#/home/programs/nextflow/nextflow run ./ --all --input samplesheet.csv --outdir /home/diagnostics/pipelines/nf-core/rnafusion-3.0.1 --genome GRCh38 -profile docker -resume > ${log_file}
 
 > ${samplesheet}_bedmap
 for i in `cat ${samplesheet}`
@@ -52,8 +52,8 @@ do
 		echo "could not map the panel name to a directory, ${i} ${bed}"
 		exit 1
 	esac
-echo "${i},${bedfile}" >> ${samplesheet}_bedmap
+echo "${i},${bedfile},$PWD/star_for_arriba/${i}.Aligned.out.bam" >> ${samplesheet}_bedmap
 done
 
-/home/programs/nextflow/nextflow -C /home/diagnostics/pipelines/nf-core/rnafusion-3.0.1/scripts/custom.config run /home/diagnostics/pipelines/nf-core/rnafusion-3.0.1/scripts/custom_v2.nf -entry COVERAGE -resume --input ${samplesheet}_bedmap > ${log_file}.coverage
+/home/programs/nextflow/nextflow -C /home/diagnostics/pipelines/nf-core/rnafusion-3.0.1/scripts/custom.config run /home/diagnostics/pipelines/nf-core/rnafusion-3.0.1/scripts/custom_v2.nf -entry COVERAGE -profile docker -resume --input ${samplesheet}_bedmap > ${log_file}.coverage
 
